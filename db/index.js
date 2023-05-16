@@ -1,5 +1,4 @@
 const { Client } = require("pg");
-const { rows } = require("pg/lib/defaults");
 const client = new Client("postgres://localhost:5432/juicebox-dev");
 
 async function createUser({ username, password, name, location }) {
@@ -91,6 +90,8 @@ async function updatePost(id, fields = {}) {
     return;
   }
 
+  console.log("setString" + setString);
+
   try {
     const {
       rows: [post],
@@ -103,6 +104,26 @@ async function updatePost(id, fields = {}) {
     `,
       Object.values(fields)
     );
+
+    return post;
+  } catch (error) {
+    throw error;
+  }
+}
+
+async function getPostById(postId) {
+  try {
+    console.log("Post id " + postId);
+    const { rows } = await client.query(
+      `SELECT id, "authorId" , title, content, active
+    FROM posts
+    where id=${postId};
+  `
+    );
+
+    post = rows[0]; // should only return 1 row
+
+    console.log(post);
 
     return post;
   } catch (error) {
