@@ -1,15 +1,6 @@
 const { Client } = require("pg");
+const { rows } = require("pg/lib/defaults");
 const client = new Client("postgres://localhost:5432/juicebox-dev");
-
-async function getAllUsers() {
-  const { rows } = await client.query(
-    `SELECT id, username , name, location, active
-    FROM users;
-  `
-  );
-
-  return rows;
-}
 
 async function createUser({ username, password, name, location }) {
   try {
@@ -26,25 +17,6 @@ async function createUser({ username, password, name, location }) {
     );
 
     return user;
-  } catch (error) {
-    throw error;
-  }
-}
-
-async function createPost({ authorId, title, content }) {
-  try {
-    const {
-      rows: [post],
-    } = await client.query(
-      `
-      INSERT INTO posts("authorId", title, content) 
-      VALUES($1, $2, $3)
-      RETURNING *;
-    `,
-      [authorId, title, content]
-    );
-
-    return post;
   } catch (error) {
     throw error;
   }
@@ -76,6 +48,40 @@ async function updateUser(id, fields = {}) {
     throw error;
   }
 }
+
+async function getAllUsers() {
+  try {
+    const { rows } = await client.query(
+      `SELECT id, username , name, location, active
+    FROM users;
+  `
+    );
+
+    return rows;
+  } catch (error) {
+    throw error;
+  }
+}
+
+async function createPost({ authorId, title, content }) {
+  try {
+    const {
+      rows: [post],
+    } = await client.query(
+      `
+      INSERT INTO posts("authorId", title, content) 
+      VALUES($1, $2, $3)
+      RETURNING *;
+    `,
+      [authorId, title, content]
+    );
+
+    return post;
+  } catch (error) {
+    throw error;
+  }
+}
+
 async function updatePost(id, fields = {}) {
   const setString = Object.keys(fields)
     .map((key, index) => `"${key}"=$${index + 1}`)
@@ -106,29 +112,36 @@ async function updatePost(id, fields = {}) {
 
 async function getAllPosts() {
   try {
-    const { rows } = await client.query(`
-      SELECT *
+    const { rows: postIds } = await client.query(`
+      SELECT id
       FROM posts;
     `);
 
-    return rows;
+    const posts = await Promise.all(postIds.map(({ id }) => getPostById(id)));
+
+    return posts;
   } catch (error) {
     throw error;
   }
 }
 async function getPostsByUser(userId) {
   try {
-    const { rows } = await client.query(`
-      SELECT * 
+    const { rows: postIds } = await client.query(
+      `
+      SELECT id 
       FROM posts
-      WHERE "authorId"=${userId};
-    `);
+      WHERE "authorId"=$1;
+    `[userId]
+    );
 
-    return rows;
+    const posts = await Promise.all(postIds.map(({ id }) => getPostById(id)));
+
+    return posts;
   } catch (error) {
     throw error;
   }
 }
+
 async function getUserById(userId) {
   try {
     const {
@@ -151,15 +164,80 @@ async function getUserById(userId) {
   }
 }
 
+async function createTags(tagList) {
+  if (tagList.length === 0) {
+    return;
+  }
+  const insertValues = tagList.map((_, index) => `$${index + 1}`).join("), (");
+
+  const selectValues = tagList.map((_, index) => `$${index + 1}`).join(", ");
+
+  try {
+    await client.query(
+      `
+      INSERT INTO tags(name)
+      VALUES (${insertValues});
+      ON CONFLICT (name) DO NOTHING;
+      RETURNING *;
+      `,
+      tagList
+    );
+
+    const { rows } = await client.query(
+      `   
+    SELECT *
+    FROM tags
+    WHERE name
+    IN (${selectValues});
+    `,
+      tagList
+    );
+
+    return rows;
+  } catch (error) {
+    throw error;
+  }
+}
+
+async function createPostTag(postId, tagId) {
+  try {
+    await client.query(
+      `
+      INSERT INTO post_tags("postId", "tagId")
+      VALUES ($1, $2)
+      ON CONFLICT ("postId", "tagId") DO NOTHING;
+    `,
+      [postId, tagId]
+    );
+  } catch (error) {
+    throw error;
+  }
+}
+
+async function addTagsToPost(postId, tagList) {
+  try {
+    const createPostTagPromises = tagList.map((tag) =>
+      createPostTag(postId, tag.id)
+    );
+
+    await Promise.all(createPostTagPromises);
+
+    return await getPostById(postId);
+  } catch (error) {
+    throw error;
+  }
+}
+
 module.exports = {
   client,
   getAllUsers,
   createUser,
   updateUser,
-  getAllUsers,
   getUserById,
   createPost,
   updatePost,
   getAllPosts,
   getPostsByUser,
+  createTags,
+  addTagsToPost,
 };
