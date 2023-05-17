@@ -56,7 +56,8 @@ async function createTables() {
       );
       CREATE TABLE post_tags(
         "postId" INTEGER REFERENCES posts(id), 
-        "tagId" INTEGER REFERENCES tags(id) 
+        "tagId" INTEGER REFERENCES tags(id),
+        UNIQUE ("postId","tagId")
       );
     `);
 
@@ -165,6 +166,7 @@ async function rebuildDB() {
     await createTables();
     await createInitialUsers();
     await createInitialPosts();
+    //await createInitialTags();
   } catch (error) {
     console.log("error during rebuildDB");
     throw error;
