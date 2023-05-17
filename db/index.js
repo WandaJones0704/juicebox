@@ -82,30 +82,76 @@ async function createPost({ authorId, title, content }) {
 }
 
 async function updatePost(id, fields = {}) {
-  const setString = Object.keys(fields)
-    .map((key, index) => `"${key}"=$${index + 1}`)
-    .join(", ");
+  console.log("fields" + JSON.stringify(fields));
 
-  if (setString.length === 0) {
-    return;
+  for (let key in fields) {
+    if (key == "tags") {
+      tags = fields[key];
+
+      for (let i = 0; i < tags.length; i++) {
+        tag = tags[i];
+
+        tagId = await getTagId(tag);
+        console.log("tag: " + tag + " tagId: " + tagId);
+
+        try {
+          await client.query(
+            `
+            INSERT INTO post_tags("postId", "tagId")
+            VALUES (${id},${tagId});
+            `
+          );
+        } catch (error) {
+          throw error;
+        }
+      }
+    } else {
+      fieldName = key;
+      fieldValue = fields[key];
+
+      try {
+        await client.query(
+          `
+          UPDATE posts
+          SET  ${fieldName} = '${fieldValue}'
+          `
+        );
+      } catch (error) {
+        throw error;
+      }
+
+      //
+    }
   }
+}
 
-  console.log("setString" + setString);
-
+async function getTagId(tag) {
+  console.log("I am here");
   try {
-    const {
-      rows: [post],
-    } = await client.query(
+    await client.query(
       `
-      UPDATE posts
-      SET ${setString}
-      WHERE id=${id}
+      INSERT INTO tags(name)
+      VALUES ('${tag}')
+      ON CONFLICT (name) DO NOTHING
       RETURNING *;
-    `,
-      Object.values(fields)
+      `
     );
 
-    return post;
+    console.log("I am here 2");
+
+    const { rows } = await client.query(
+      `
+    SELECT id
+    FROM tags
+    WHERE name = '${tag}';
+    `
+    );
+
+    row = rows[0];
+
+    tagId = row.id;
+
+    return tagId;
   } catch (error) {
     throw error;
   }
